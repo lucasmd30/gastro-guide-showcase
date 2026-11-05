@@ -8,7 +8,11 @@ It is **in production and in its pilot phase**, in real use at a medical practic
 
 
 
-https://github.com/user-attachments/assets/c55a292a-797a-47e0-bcdb-ba4f60b66994
+
+
+https://github.com/user-attachments/assets/5eb055e9-5d00-4c50-9982-5fdc72c849a2
+
+
 
 
 
