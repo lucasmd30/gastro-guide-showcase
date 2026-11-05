@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: gastro-guide-api
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:gastroguide}
+    username: ${DB_USER:gastroguide}
+    password: ${DB_PASSWORD:gastroguide}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  # Signed PDF attached to a medical document (up to 8 MB, see
+  # MedicalDocumentSignatureService).
+  servlet:
+    multipart:
+      max-file-size: 9MB
+      max-request-size: 10MB
+
+server:
+  port: ${PORT:8080}
+
+jwt:
+  # No default value on purpose: if JWT_SECRET is not set, Spring fails at
+  # startup (unresolved placeholder) instead of silently accepting a public,
+  # compromised secret. The local environment uses the fixed value defined in
+  # docker-compose.yml (dev-only infrastructure); production sets its own
+  # environment variable.
+  secret: ${JWT_SECRET}
+  access-token-expiration-minutes: ${JWT_ACCESS_EXP_MIN:15}
+  refresh-token-expiration-days: ${JWT_REFRESH_EXP_DAYS:30}
+
+logging:
+  level:
+    com.gastroguide: DEBUG

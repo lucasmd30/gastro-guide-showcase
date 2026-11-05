@@ -1,0 +1,57 @@
+# Caddy is the only thing exposed to the internet. It terminates TLS (Let's
+# Encrypt certificates issued and renewed automatically), forwards to Next.js
+# on the internal network and handles the headers the browser needs to see.
+#
+# The Spring backend is NOT listed here on purpose: nobody outside should
+# reach the API directly. Only the frontend talks to it, over the Docker network.
+
+{
+	email {$EMAIL_TLS}
+	# Less log noise, and nothing that identifies the server.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	# Security headers. Next also sends them (next.config.ts); this is the second
+	# layer, which also covers error responses from the proxy.
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Do not advertise the server or framework.
+		-Server
+		-X-Powered-By
+	}
+
+	# Health records must not be cached by intermediate proxies.
+	header /api/* Cache-Control "no-store"
+
+	reverse_proxy frontend:3000 {
+		header_up X-Real-IP {remote_host}
+		# If Next is slow to respond, fail fast instead of holding the connection.
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+		}
+	}
+
+	log {
+		output stdout
+		format json
+		# Do not log the full path with the query string: the URL carries patient
+		# IDs and search terms, which are personal data.
+		level INFO
+	}
+}
+
+# The system lives at the domain root. "www" exists only for people who type it
+# out of habit: it gets its own certificate and redirects to the root.
+www.{$DOMINIO} {
+	redir https://{$DOMINIO}{uri} permanent
+}

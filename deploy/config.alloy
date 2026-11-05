@@ -1,0 +1,26 @@
+// Coleta as métricas da VM e do banco e envia para o Grafana Cloud.
+// Só métricas — log de aplicação não sai da VM, porque log de prontuário
+// carrega dado de paciente e não deve ser enviado a terceiro.
+
+prometheus.scrape "vm" {
+  targets = [{ __address__ = "node-exporter:9100" }]
+  forward_to = [prometheus.remote_write.grafana.receiver]
+  scrape_interval = "60s"
+}
+
+prometheus.scrape "banco" {
+  targets = [{ __address__ = "postgres-exporter:9187" }]
+  forward_to = [prometheus.remote_write.grafana.receiver]
+  scrape_interval = "60s"
+}
+
+prometheus.remote_write "grafana" {
+  endpoint {
+    url = sys.env("GRAFANA_PROM_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_PROM_USER")
+      password = sys.env("GRAFANA_PROM_PASSWORD")
+    }
+  }
+}

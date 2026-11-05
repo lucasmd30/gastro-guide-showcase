@@ -1,0 +1,8 @@
+# O que não entra no contexto de build da imagem. Sem isto, o `COPY . .` do
+# Dockerfile arrasta node_modules e .next da máquina de dev (centenas de MB)
+# para dentro do build — lento, e o .next velho pode contaminar o build novo.
+node_modules
+.next
+.env*
+!.env.example
+npm-debug.log*

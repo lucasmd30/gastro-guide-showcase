@@ -1,0 +1,1 @@
+ALTER TABLE patients ADD COLUMN phone2 VARCHAR(40);

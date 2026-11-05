@@ -1,0 +1,24 @@
+
+# Backend (Maven/Java)
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.iml
+
+# IDE
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env: production secrets never enter the repo; only the templates do.
+.env
+.env.*
+!.env.example
+!deploy/.env.prod.example
+
+# Docker
+docker-compose.override.yml

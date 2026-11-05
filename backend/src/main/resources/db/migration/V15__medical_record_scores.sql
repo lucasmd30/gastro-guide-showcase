@@ -1,0 +1,11 @@
+-- Escalas e calculadoras clínicas calculadas durante o atendimento (FIB-4,
+-- Child-Pugh, MELD, Mayo, CDAI…). Guardadas como uma LISTA de strings já
+-- formatadas ("FIB-4: 2,10 (indeterminado)"), e não como as entradas da
+-- conta, de propósito: o que tem valor médico-legal é o resultado que
+-- embasou a conduta naquele dia, com a interpretação vigente. Recalcular
+-- depois a partir dos insumos daria outro número se o ponto de corte ou a
+-- fórmula mudarem.
+--
+-- JSONB (e não tabela própria) pelo mesmo motivo do content_json: é conteúdo
+-- livre de um registro imutável, sem consulta relacional prevista.
+ALTER TABLE medical_records ADD COLUMN scores_json JSONB;

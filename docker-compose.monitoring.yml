@@ -1,0 +1,58 @@
+# Monitoring. A separate file on purpose: the main stack starts without it,
+# and this one can be added later without touching what is already running.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml \
+#     --env-file .env.prod up -d
+#
+# Magalu Cloud has no monitoring product. Without this, you only find out the
+# machine is at its limit when users complain about slowness, and capacity
+# planning depends on seeing CPU, memory and disk.
+#
+# The Grafana Cloud free tier comfortably covers this installation.
+
+services:
+  # VM metrics: CPU, memory, disk, network.
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /:/host:ro,rslave
+    expose:
+      - "9100"
+    networks: [interna]
+
+  # Managed database metrics: connections, size, cache hit rate, locks.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    restart: unless-stopped
+    environment:
+      # Read-only user: the exporter does not need to (and must not) see
+      # patient data.
+      DATA_SOURCE_NAME: "postgresql://${METRICS_DB_USER}:${METRICS_DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE:-require}"
+    expose:
+      - "9187"
+    networks: [interna]
+
+  # Collects the two above and sends them to Grafana Cloud.
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "/etc/alloy/config.alloy"
+    volumes:
+      - ./deploy/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      GRAFANA_PROM_URL: ${GRAFANA_PROM_URL}
+      GRAFANA_PROM_USER: ${GRAFANA_PROM_USER}
+      GRAFANA_PROM_PASSWORD: ${GRAFANA_PROM_PASSWORD}
+    networks: [interna]
+
+networks:
+  interna:
+    external: true
+    name: gastro-guide_interna

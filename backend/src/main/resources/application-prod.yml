@@ -1,0 +1,67 @@
+# Production profile. Enabled with SPRING_PROFILES_ACTIVE=prod.
+#
+# Differences from application.yml (which serves development):
+#  * database password has no default: startup fails if it is not in the environment
+#  * logging at INFO, not DEBUG (DEBUG prints patient data to the logs)
+#  * sized connection pool with explicit timeouts
+#  * SSL required for the managed database connection
+#  * real client IP resolved by Tomcat from the proxy (see below)
+
+spring:
+  datasource:
+    # No defaults here on purpose: in production, a missing variable must break
+    # the boot, not silently fall back to a development value.
+    # sslmode=require is the default and what production uses: the DBaaS accepts
+    # TLS and the connection leaves the VM. The variable exists only to allow
+    # validating the production image against a local Postgres without TLS.
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE:require}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      # 250 physicians generate a peak of ~25 req/s; 20 connections leave ample
+      # headroom. Raising this without growing the database makes things worse.
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: 5
+      connection-timeout: 10000
+      validation-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 25
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: ${PORT:8080}
+  # Caddy, in front, terminates TLS and forwards the real IP in X-Forwarded-For.
+  # With "native", Tomcat resolves it by itself (RemoteIpValve): it drops the
+  # internal proxy hops and puts the real IP in getRemoteAddr(). That is why
+  # AuthController/IntakeController call getRemoteAddr() directly instead of
+  # parsing the header by hand; manual X-Forwarded-For parsing trusts too much
+  # of what the client sends.
+  forward-headers-strategy: native
+  shutdown: graceful
+  error:
+    # Never return a stack trace to the client.
+    include-message: never
+    include-stacktrace: never
+    include-exception: false
+  tomcat:
+    max-http-form-post-size: 2MB
+
+logging:
+  level:
+    root: WARN
+    com.gastroguide: ${LOG_LEVEL:INFO}
+    org.springframework.web: WARN
+    org.hibernate: WARN

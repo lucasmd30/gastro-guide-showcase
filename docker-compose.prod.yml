@@ -1,0 +1,130 @@
+# Production stack. Key differences from docker-compose.yml (development only):
+#
+#  1. It does NOT start Postgres. The database is the managed DBaaS, which
+#     has automatic backups; clinical data cannot live in a container that
+#     gets recreated.
+#  2. Backend and frontend do NOT publish host ports. Only Caddy talks to the
+#     internet; both stay on the internal Docker network, unreachable from
+#     outside. This stops anyone from hitting the API directly, past the proxy.
+#  3. Images are PREBUILT, published by CI to GitHub Container Registry on
+#     every push to master that passes the tests. The VM only runs `pull` and
+#     never compiles. The Next and Maven builds need 1.5 to 2 GB each, which
+#     on a 4 GB VM would kill the running backend. It also guarantees that
+#     what ships is exactly what passed the suite.
+#  4. Memory limits are sized for the SMALL VM chosen for the initial deploy
+#     (BV2-4-40: 2 vCPU, 4 GB). The JVM sizes its heap from the CONTAINER
+#     LIMIT, not the machine RAM. Budget: backend 1.5G (heap ~1G; measured
+#     456 MiB under load) + frontend 512M + Caddy/backup ~0.2G + system
+#     ~0.6G, leaving ~1.2G. Moving to the 8 GB VM (BV4-8-40) is the trigger
+#     to raise these two back to 4G/1G.
+#
+# Usage: docker compose -f docker-compose.prod.yml --env-file .env.prod pull
+#        docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# The images are private: the VM needs a one-time `docker login ghcr.io` with
+# a package read token. IMAGE_TAG (optional in .env.prod) pins a version, such
+# as `sha-abc1234`, instead of following `latest`; that is the rollback path.
+#
+# pull_policy is `missing` on purpose: `up -d` alone never contacts the
+# registry if the image is already on disk. New versions come only from the
+# explicit `pull` above, so an expired or revoked GHCR token cannot take
+# anything down by accident; it only blocks the next deploy until replaced.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # The only port exposed to the internet.
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMINIO: ${DOMINIO}
+      EMAIL_TLS: ${EMAIL_TLS}
+    depends_on:
+      - frontend
+    networks: [interna]
+
+  frontend:
+    image: ghcr.io/lucasmd30/gastro-guide-frontend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Internal network: the browser never uses this URL, only the Next server.
+      API_URL: http://backend:8080
+    # No `ports:` on purpose; see note 2 above.
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [interna]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  backend:
+    image: ghcr.io/lucasmd30/gastro-guide-backend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSLMODE: ${DB_SSLMODE:-require}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      JWT_SECRET: ${JWT_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    expose:
+      - "8080"
+    networks: [interna]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          # The JVM uses 70% of this for heap (see backend/Dockerfile).
+          memory: 1536M
+
+  # Runs the daily pg_dump to Object Storage. It starts, sleeps until the right
+  # time, runs and repeats, without depending on the host cron.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      RETENCAO_DIAS: ${RETENCAO_DIAS:-90}
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    networks: [interna]
+
+networks:
+  interna:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
