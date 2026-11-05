@@ -6,6 +6,12 @@ It is **in production and in its pilot phase**, in real use at a medical practic
 
 ![Java](https://img.shields.io/badge/Java-21-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-green) ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue) ![Tests](https://img.shields.io/badge/tests-178-brightgreen)
 
+
+
+https://github.com/user-attachments/assets/c55a292a-797a-47e0-bcdb-ba4f60b66994
+
+
+
 > The product serves Brazilian physicians, so its interface, API messages and code comments are in Portuguese.
 
 ## About this repository
